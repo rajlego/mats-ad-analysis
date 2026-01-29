@@ -12,7 +12,7 @@
  *   - Output: 10.0 referral sources
  */
 
-const APPLICATIONS_TABLE = '10.0 applications';
+const APPLICATIONS_TABLE = '10.0 application';
 const REFERRAL_FIELD = '[stage-1-logistics] How did you hear about us?';
 const OUTPUT_TABLE = '10.0 referral sources';
 
