@@ -58,6 +58,11 @@ let blankAdvanced = 0;
 let blankRejected = 0;
 let blankPending = 0;
 
+// Track totals separately (count each app once, not per-source)
+let totalAdvanced = 0;
+let totalRejected = 0;
+let totalPending = 0;
+
 for (const record of applicationsQuery.records) {
     const sources = record.getCellValue(REFERRAL_FIELD);
     const stage2Status = record.getCellValueAsString(STAGE_2_FIELD);
@@ -66,6 +71,11 @@ for (const record of applicationsQuery.records) {
     const isAdvanced = stage2Status === STATUS_ADVANCED;
     const isRejected = stage2Status === STATUS_REJECTED;
     const isPending = !stage2Status;
+
+    // Count for overall totals (each app counted once)
+    if (isAdvanced) totalAdvanced++;
+    else if (isRejected) totalRejected++;
+    else totalPending++;
 
     if (!sources || !Array.isArray(sources) || sources.length === 0) {
         // No response
@@ -99,23 +109,9 @@ if (blankCount > 0) {
     };
 }
 
-// Calculate totals across all sources
-let totalCount = 0;
-let totalAdvanced = 0;
-let totalRejected = 0;
-let totalPending = 0;
-
-for (const data of Object.values(sourceData)) {
-    totalAdvanced += data.advanced;
-    totalRejected += data.rejected;
-    totalPending += data.pending;
-}
-// Note: totalCount uses totalApplications since an app can have multiple sources
-totalCount = totalApplications;
-
-// Add total row
+// Add total row (using unique app counts, not summed per-source counts)
 sourceData[TOTAL_SOURCE] = {
-    count: totalCount,
+    count: totalApplications,
     advanced: totalAdvanced,
     rejected: totalRejected,
     pending: totalPending
