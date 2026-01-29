@@ -128,9 +128,10 @@ async function fetchMetrics() {
     const dateFilter = `timestamp >= toDateTime('${startISO} 00:00:00') AND timestamp <= toDateTime('${endISO} 23:59:59')`;
 
     // Query with (direct) for missing utm_source
+    // Note: Property names are without $ prefix (utm_source, not $utm_source)
     const query = `
         SELECT
-            lower(coalesce(nullIf(trim(properties.$utm_source), ''), '${DIRECT_HANDLE}')) as handle,
+            lower(coalesce(nullIf(trim(properties.utm_source), ''), '${DIRECT_HANDLE}')) as handle,
             count() as events,
             countIf(event = '$pageview') as pageviews,
             count(DISTINCT distinct_id) as unique_visitors,
@@ -138,7 +139,7 @@ async function fetchMetrics() {
             countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
             min(timestamp) as first_active,
             max(timestamp) as last_active,
-            groupUniqArray(properties.$utm_campaign) as campaigns
+            groupUniqArray(properties.utm_campaign) as campaigns
         FROM events
         WHERE ${dateFilter}
         GROUP BY handle
@@ -159,7 +160,7 @@ async function fetchMetrics() {
             countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
             min(timestamp) as first_active,
             max(timestamp) as last_active,
-            groupUniqArray(properties.$utm_campaign) as campaigns
+            groupUniqArray(properties.utm_campaign) as campaigns
         FROM events
         WHERE ${dateFilter}
     `;
