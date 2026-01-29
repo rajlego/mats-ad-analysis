@@ -9,8 +9,8 @@
  *   - posthog_api_key: Your PostHog project API key
  *   - posthog_project_id: Your PostHog project ID
  *   - posthog_data_table: Name of the PostHog data table (e.g., "PostHog data")
- *   - round_start: Start date for this round (M/D/YY format, e.g., 1/1/25)
- *   - round_end: End date for this round (M/D/YY format, e.g., 3/15/25)
+ *   - round_start: Start date for this round (M/D/YY or M/D/YYYY, e.g., 1/1/25 or 1/1/2025)
+ *   - round_end: End date for this round (M/D/YY or M/D/YYYY, e.g., 3/15/25 or 3/15/2025)
  */
 
 const inputConfig = input.config();
@@ -19,8 +19,8 @@ const inputConfig = input.config();
 const POSTHOG_API_KEY = inputConfig.posthog_api_key;
 const POSTHOG_PROJECT_ID = inputConfig.posthog_project_id;
 const POSTHOG_DATA_TABLE = inputConfig.posthog_data_table;
-const ROUND_START = inputConfig.round_start; // M/D/YY format
-const ROUND_END = inputConfig.round_end; // M/D/YY format
+const ROUND_START = inputConfig.round_start; // M/D/YY or M/D/YYYY format
+const ROUND_END = inputConfig.round_end; // M/D/YY or M/D/YYYY format
 
 const POSTHOG_HOST = 'https://app.posthog.com';
 
@@ -35,22 +35,40 @@ const PROGRAM_PAGE_PATTERN = '%/program/%';
 // ============ DATE UTILITIES ============
 
 /**
- * Convert M/D/YY to YYYY-MM-DD for HogQL queries
- * @param {string} dateStr - Date in M/D/YY format (e.g., "1/1/25")
+ * Convert M/D/YY or M/D/YYYY to YYYY-MM-DD for HogQL queries
+ * @param {string} dateStr - Date in M/D/YY or M/D/YYYY format (e.g., "1/1/25" or "1/1/2025")
  * @returns {string} Date in YYYY-MM-DD format (e.g., "2025-01-01")
  */
 function toISODate(dateStr) {
     const [month, day, year] = dateStr.split('/');
-    const fullYear = parseInt(year) < 50 ? `20${year.padStart(2, '0')}` : `19${year.padStart(2, '0')}`;
+    let fullYear;
+    if (year.length === 4) {
+        fullYear = year;
+    } else {
+        fullYear = parseInt(year) < 50 ? `20${year.padStart(2, '0')}` : `19${year.padStart(2, '0')}`;
+    }
     return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
 /**
- * Convert M/D/YY to Airtable-compatible date (YYYY-MM-DD)
+ * Convert M/D/YY or M/D/YYYY to Airtable-compatible date (YYYY-MM-DD)
  * Airtable accepts ISO dates and stores them properly
  */
 function toAirtableDate(dateStr) {
     return toISODate(dateStr);
+}
+
+/**
+ * Normalize date to M/D/YY format for Key matching
+ * Airtable's DATETIME_FORMAT uses M/D/YY, so we must match that
+ * @param {string} dateStr - Date in M/D/YY or M/D/YYYY format
+ * @returns {string} Date in M/D/YY format (e.g., "1/1/25")
+ */
+function toKeyFormat(dateStr) {
+    const [month, day, year] = dateStr.split('/');
+    const shortYear = year.length === 4 ? year.slice(-2) : year;
+    // Remove leading zeros from month/day to match Airtable's M/D/YY format
+    return `${parseInt(month)}/${parseInt(day)}/${shortYear}`;
 }
 
 // ============ VALIDATION ============
@@ -67,11 +85,11 @@ function validateInputs() {
         throw new Error(`Missing required input variables: ${missing.join(', ')}`);
     }
 
-    if (!/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(ROUND_START)) {
-        throw new Error(`round_start must be M/D/YY format (e.g., 1/1/25), got: ${ROUND_START}`);
+    if (!/^\d{1,2}\/\d{1,2}\/(\d{2}|\d{4})$/.test(ROUND_START)) {
+        throw new Error(`round_start must be M/D/YY or M/D/YYYY format (e.g., 1/1/25 or 1/1/2025), got: ${ROUND_START}`);
     }
-    if (!/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(ROUND_END)) {
-        throw new Error(`round_end must be M/D/YY format (e.g., 3/15/25), got: ${ROUND_END}`);
+    if (!/^\d{1,2}\/\d{1,2}\/(\d{2}|\d{4})$/.test(ROUND_END)) {
+        throw new Error(`round_end must be M/D/YY or M/D/YYYY format (e.g., 3/15/25 or 3/15/2025), got: ${ROUND_END}`);
     }
 }
 
@@ -183,8 +201,8 @@ async function fetchMetrics() {
 // ============ AIRTABLE UPSERT ============
 
 function computeKey(handle) {
-    // Input is already M/D/YY format, matching Airtable formula
-    return `${handle}-${ROUND_START}-${ROUND_END}`;
+    // Normalize to M/D/YY to match Airtable's DATETIME_FORMAT
+    return `${handle}-${toKeyFormat(ROUND_START)}-${toKeyFormat(ROUND_END)}`;
 }
 
 async function upsertPostHogData(metrics) {
