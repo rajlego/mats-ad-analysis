@@ -15,6 +15,7 @@
 const APPLICATIONS_TABLE = '10.0 application';
 const REFERRAL_FIELD = '[stage-1-logistics] How did you hear about us?';
 const STAGE_2_FIELD = '[stage-1-infra] Advance to stage 2';
+const CREATED_TIME_FIELD = 'Created'; // Add "Created time" field to table if missing
 const OUTPUT_TABLE = '10.0 referral sources daily';
 
 // Special source names
@@ -40,7 +41,7 @@ const outputTable = base.getTable(OUTPUT_TABLE);
 // Fetch all applications with created time
 console.log(`\n1. Fetching records from "${APPLICATIONS_TABLE}"...`);
 const applicationsQuery = await applicationsTable.selectRecordsAsync({
-    fields: [REFERRAL_FIELD, STAGE_2_FIELD]
+    fields: [REFERRAL_FIELD, STAGE_2_FIELD, CREATED_TIME_FIELD]
 });
 
 const totalApplications = applicationsQuery.records.length;
@@ -51,9 +52,9 @@ console.log('\n2. Processing applications by creation date...');
 const applications = [];
 
 for (const record of applicationsQuery.records) {
-    const createdTime = record.createdTime; // ISO string or Date object
+    const createdTime = record.getCellValue(CREATED_TIME_FIELD);
     if (!createdTime) {
-        console.log(`   Warning: record ${record.id} has no createdTime, skipping`);
+        console.log(`   Warning: record ${record.id} has no created time, skipping`);
         continue;
     }
     // Handle both string and Date object
