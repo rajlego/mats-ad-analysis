@@ -156,9 +156,9 @@ for (const name of sourceNames) {
     const fields = {
         'Source': name,
         'Count': data.count,
-        'Advanced': data.advanced,
-        'Rejected': data.rejected,
-        'Pending': data.pending,
+        'Stage 2 advanced': data.advanced,
+        'Stage 2 rejected': data.rejected,
+        'Stage 2 pending': data.pending,
         'Total applications': totalApplications
     };
 
@@ -178,9 +178,9 @@ for (const [source, record] of Object.entries(sourceToRecord)) {
             id: record.id,
             fields: {
                 'Count': 0,
-                'Advanced': 0,
-                'Rejected': 0,
-                'Pending': 0,
+                'Stage 2 advanced': 0,
+                'Stage 2 rejected': 0,
+                'Stage 2 pending': 0,
                 'Total applications': totalApplications
             }
         });
