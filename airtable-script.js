@@ -121,37 +121,6 @@ async function runHogQLQuery(query) {
     return data.results || [];
 }
 
-/**
- * List available UTM-related properties from a sample of events
- * Useful for debugging and discovering property names
- */
-async function listAvailableProperties() {
-    const startISO = toISODate(ROUND_START);
-    const endISO = toISODate(ROUND_END);
-
-    // Get a sample of property keys that contain 'utm' (case-insensitive)
-    const query = `
-        SELECT DISTINCT
-            arrayJoin(mapKeys(properties)) as prop_name
-        FROM events
-        WHERE timestamp >= toDateTime('${startISO} 00:00:00')
-            AND timestamp <= toDateTime('${endISO} 23:59:59')
-        LIMIT 10000
-    `;
-
-    const results = await runHogQLQuery(query);
-    const allProps = results.map(r => r[0]).filter(p => p);
-
-    // Filter for UTM-related and other potentially useful properties
-    const utmProps = allProps.filter(p =>
-        p.toLowerCase().includes('utm') ||
-        p.toLowerCase().includes('source') ||
-        p.toLowerCase().includes('campaign') ||
-        p.toLowerCase().includes('referrer')
-    );
-
-    return [...new Set(utmProps)].sort();
-}
 
 async function fetchMetrics() {
     // Convert M/D/YY to ISO for HogQL
@@ -340,17 +309,8 @@ console.log(`  Table: ${POSTHOG_DATA_TABLE}`);
 console.log(`  Round: ${ROUND_START} to ${ROUND_END}`);
 console.log(`  Round (ISO): ${toISODate(ROUND_START)} to ${toISODate(ROUND_END)}`);
 
-// List available UTM properties (for debugging)
-console.log('\n1. Discovering available properties...');
-const availableProps = await listAvailableProperties();
-if (availableProps.length > 0) {
-    console.log(`   Found UTM/source/campaign properties: ${availableProps.join(', ')}`);
-} else {
-    console.log('   No UTM-related properties found in sample');
-}
-
 // Fetch metrics from PostHog
-console.log('\n2. Fetching metrics from PostHog...');
+console.log('\n1. Fetching metrics from PostHog...');
 const metrics = await fetchMetrics();
 
 // Log summary
@@ -370,7 +330,7 @@ if (metrics.length === 0) {
     console.log('\nNo data found for this date range.');
 } else {
     // Upsert into PostHog data table
-    console.log('\n3. Upserting into Airtable...');
+    console.log('\n2. Upserting into Airtable...');
     const result = await upsertPostHogData(metrics);
 
     console.log('\n' + '='.repeat(50));
