@@ -46,10 +46,16 @@ const fields = [
         description: 'End of date range'
     },
     {
-        name: 'Visits',
+        name: 'Events',
         type: 'number',
         options: { precision: 0 },
-        description: 'Total pageviews'
+        description: 'Total events'
+    },
+    {
+        name: 'Pageviews',
+        type: 'number',
+        options: { precision: 0 },
+        description: 'Total $pageview events'
     },
     {
         name: 'Unique visitors',
@@ -111,7 +117,7 @@ if (existingFields.includes(keyFieldName)) {
     output.text(`✓ "${keyFieldName}" already exists`);
 } else {
     try {
-        const formula = '{Handle} & "-" & DATETIME_FORMAT({Round start}, \'YYYY-MM-DD\') & "-" & DATETIME_FORMAT({Round end}, \'YYYY-MM-DD\')';
+        const formula = 'IF(AND({Handle}, {Round start}, {Round end}), {Handle} & "-" & DATETIME_FORMAT({Round start}, \'M/D/YY\') & "-" & DATETIME_FORMAT({Round end}, \'M/D/YY\'), "")';
         await table.createFieldAsync(keyFieldName, 'formula', { formula }, 'Primary key: Handle-StartDate-EndDate');
         output.text(`✓ Created "${keyFieldName}" formula field`);
     } catch (e) {

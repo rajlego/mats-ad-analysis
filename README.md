@@ -25,23 +25,26 @@ Syncs PostHog analytics to Airtable, creating aggregated records per handle (utm
 
 1. Runs a HogQL query against PostHog for a date range
 2. Aggregates metrics per handle (utm_source)
-3. Upserts records into the PostHog data table (updates existing, creates new)
-4. Handles tables can link to these records via a separate automation
+3. Creates a `(direct)` handle for traffic without utm_source
+4. Creates an `(all)` handle with total aggregation (sanity check)
+5. Upserts records into the PostHog data table (updates existing, creates new)
+6. Handles tables can link to these records via a separate automation
 
 ## PostHog data table structure
 
 | Field | Type | Description |
 |-------|------|-------------|
-| Key | Formula | `{Handle}-{Round start}-{Round end}` (primary key) |
-| Handle | Text | The utm_source value |
-| Round start | Date | Start of date range |
-| Round end | Date | End of date range |
-| Visits | Number | Total pageviews |
+| Key | Formula | `{Handle}-{Round start M/D/YY}-{Round end M/D/YY}` (primary key) |
+| Handle | Text | The utm_source value, or `(direct)` for no utm_source, or `(all)` for total |
+| Round start | Date | Start of date range (from input) |
+| Round end | Date | End of date range (from input) |
+| Events | Number | Total events |
+| Pageviews | Number | Total $pageview events |
 | Unique visitors | Number | Distinct users |
 | Apply page views | Number | `/apply` page visits |
 | Program page views | Number | `/program/` page visits |
-| First active | Date | First event in range |
-| Last active | Date | Last event in range |
+| First active | Date | First observed event in range |
+| Last active | Date | Last observed event in range |
 | Campaigns | Long text | Comma-separated utm_campaign values |
 
 ## Setup
@@ -56,7 +59,8 @@ Syncs PostHog analytics to Airtable, creating aggregated records per handle (utm
 | Handle | Single line text |
 | Round start | Date |
 | Round end | Date |
-| Visits | Number (integer) |
+| Events | Number (integer) |
+| Pageviews | Number (integer) |
 | Unique visitors | Number (integer) |
 | Apply page views | Number (integer) |
 | Program page views | Number (integer) |
@@ -67,7 +71,7 @@ Syncs PostHog analytics to Airtable, creating aggregated records per handle (utm
 
 3. For the **Key** formula field, use:
 ```
-{Handle} & "-" & DATETIME_FORMAT({Round start}, 'YYYY-MM-DD') & "-" & DATETIME_FORMAT({Round end}, 'YYYY-MM-DD')
+IF(AND({Handle}, {Round start}, {Round end}), {Handle} & "-" & DATETIME_FORMAT({Round start}, 'M/D/YY') & "-" & DATETIME_FORMAT({Round end}, 'M/D/YY'), "")
 ```
 
 ### 2. Get your PostHog credentials
@@ -91,8 +95,8 @@ In the script action's left panel, add these input variables:
 | `posthog_api_key` | Yes | `phc_xxx...` |
 | `posthog_project_id` | Yes | `12345` |
 | `posthog_data_table` | Yes | `PostHog data` |
-| `round_start` | Yes | `2025-01-01` |
-| `round_end` | Yes | `2025-03-15` |
+| `round_start` | Yes | `1/1/25` (M/D/YY format) |
+| `round_end` | Yes | `3/15/25` (M/D/YY format) |
 
 ### 5. Test and enable
 

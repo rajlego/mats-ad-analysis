@@ -9,8 +9,8 @@
  *   - posthog_api_key: Your PostHog project API key
  *   - posthog_project_id: Your PostHog project ID
  *   - posthog_data_table: Name of the PostHog data table (e.g., "PostHog data")
- *   - round_start: Start date for this round (YYYY-MM-DD)
- *   - round_end: End date for this round (YYYY-MM-DD)
+ *   - round_start: Start date for this round (M/D/YY format, e.g., 1/1/25)
+ *   - round_end: End date for this round (M/D/YY format, e.g., 3/15/25)
  */
 
 const inputConfig = input.config();
@@ -19,14 +19,39 @@ const inputConfig = input.config();
 const POSTHOG_API_KEY = inputConfig.posthog_api_key;
 const POSTHOG_PROJECT_ID = inputConfig.posthog_project_id;
 const POSTHOG_DATA_TABLE = inputConfig.posthog_data_table;
-const ROUND_START = inputConfig.round_start;
-const ROUND_END = inputConfig.round_end;
+const ROUND_START = inputConfig.round_start; // M/D/YY format
+const ROUND_END = inputConfig.round_end; // M/D/YY format
 
 const POSTHOG_HOST = 'https://app.posthog.com';
+
+// Special handles
+const DIRECT_HANDLE = '(direct)'; // For traffic without utm_source
+const TOTAL_HANDLE = '(all)'; // For total aggregation
 
 // URL patterns to track
 const APPLY_PAGE_PATTERN = '%/apply%';
 const PROGRAM_PAGE_PATTERN = '%/program/%';
+
+// ============ DATE UTILITIES ============
+
+/**
+ * Convert M/D/YY to YYYY-MM-DD for HogQL queries
+ * @param {string} dateStr - Date in M/D/YY format (e.g., "1/1/25")
+ * @returns {string} Date in YYYY-MM-DD format (e.g., "2025-01-01")
+ */
+function toISODate(dateStr) {
+    const [month, day, year] = dateStr.split('/');
+    const fullYear = parseInt(year) < 50 ? `20${year.padStart(2, '0')}` : `19${year.padStart(2, '0')}`;
+    return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
+/**
+ * Convert M/D/YY to Airtable-compatible date (YYYY-MM-DD)
+ * Airtable accepts ISO dates and stores them properly
+ */
+function toAirtableDate(dateStr) {
+    return toISODate(dateStr);
+}
 
 // ============ VALIDATION ============
 
@@ -42,11 +67,11 @@ function validateInputs() {
         throw new Error(`Missing required input variables: ${missing.join(', ')}`);
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ROUND_START)) {
-        throw new Error(`round_start must be YYYY-MM-DD format, got: ${ROUND_START}`);
+    if (!/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(ROUND_START)) {
+        throw new Error(`round_start must be M/D/YY format (e.g., 1/1/25), got: ${ROUND_START}`);
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ROUND_END)) {
-        throw new Error(`round_end must be YYYY-MM-DD format, got: ${ROUND_END}`);
+    if (!/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(ROUND_END)) {
+        throw new Error(`round_end must be M/D/YY format (e.g., 3/15/25), got: ${ROUND_END}`);
     }
 }
 
@@ -79,12 +104,17 @@ async function runHogQLQuery(query) {
 }
 
 async function fetchMetrics() {
-    const dateFilter = `timestamp >= toDateTime('${ROUND_START}T00:00:00Z') AND timestamp <= toDateTime('${ROUND_END}T23:59:59Z')`;
+    // Convert M/D/YY to ISO for HogQL
+    const startISO = toISODate(ROUND_START);
+    const endISO = toISODate(ROUND_END);
+    const dateFilter = `timestamp >= toDateTime('${startISO} 00:00:00') AND timestamp <= toDateTime('${endISO} 23:59:59')`;
 
+    // Query with (direct) for missing utm_source
     const query = `
         SELECT
-            lower(trim(properties.$utm_source)) as handle,
-            count() as visits,
+            lower(coalesce(nullIf(trim(properties.$utm_source), ''), '${DIRECT_HANDLE}')) as handle,
+            count() as events,
+            countIf(event = '$pageview') as pageviews,
             count(DISTINCT distinct_id) as unique_visitors,
             countIf(properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
             countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
@@ -92,35 +122,58 @@ async function fetchMetrics() {
             max(timestamp) as last_active,
             groupUniqArray(properties.$utm_campaign) as campaigns
         FROM events
-        WHERE properties.$utm_source IS NOT NULL
-            AND properties.$utm_source != ''
-            AND ${dateFilter}
+        WHERE ${dateFilter}
         GROUP BY handle
-        ORDER BY visits DESC
+        ORDER BY events DESC
     `;
 
-    console.log('Running HogQL query...');
+    console.log('Running HogQL query for per-handle metrics...');
     const results = await runHogQLQuery(query);
+
+    // Query for total aggregation
+    const totalQuery = `
+        SELECT
+            '${TOTAL_HANDLE}' as handle,
+            count() as events,
+            countIf(event = '$pageview') as pageviews,
+            count(DISTINCT distinct_id) as unique_visitors,
+            countIf(properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
+            countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
+            min(timestamp) as first_active,
+            max(timestamp) as last_active,
+            groupUniqArray(properties.$utm_campaign) as campaigns
+        FROM events
+        WHERE ${dateFilter}
+    `;
+
+    console.log('Running HogQL query for total aggregation...');
+    const totalResults = await runHogQLQuery(totalQuery);
+
+    // Combine results
+    const allResults = [...results, ...totalResults];
 
     // Convert to array of metrics objects
     const metrics = [];
-    for (const row of results) {
-        const [handle, visits, uniqueVisitors, applyViews, programViews, firstActive, lastActive, campaigns] = row;
+    for (const row of allResults) {
+        const [handle, events, pageviews, uniqueVisitors, applyViews, programViews, firstActive, lastActive, campaigns] = row;
 
         if (!handle) continue;
 
-        // Filter out null/empty campaigns and join
-        const campaignList = (campaigns || []).filter(c => c && c.trim());
+        // Filter out null/empty campaigns, trim each, sort, and join
+        const campaignList = (campaigns || [])
+            .map(c => (c || '').trim())
+            .filter(c => c.length > 0);
 
         metrics.push({
             handle: handle,
-            visits: visits,
+            events: events,
+            pageviews: pageviews,
             uniqueVisitors: uniqueVisitors,
             applyPageViews: applyViews,
             programPageViews: programViews,
             firstActive: firstActive ? firstActive.slice(0, 10) : null,
             lastActive: lastActive ? lastActive.slice(0, 10) : null,
-            campaigns: campaignList.length > 0 ? campaignList.sort().join(', ') : null
+            campaigns: campaignList.length > 0 ? [...new Set(campaignList)].sort().join(', ') : null
         });
     }
 
@@ -130,6 +183,7 @@ async function fetchMetrics() {
 // ============ AIRTABLE UPSERT ============
 
 function computeKey(handle) {
+    // Input is already M/D/YY format, matching Airtable formula
     return `${handle}-${ROUND_START}-${ROUND_END}`;
 }
 
@@ -153,6 +207,10 @@ async function upsertPostHogData(metrics) {
 
     console.log(`Found ${Object.keys(keyToRecord).length} existing records`);
 
+    // Convert round dates to ISO for Airtable
+    const roundStartDate = toAirtableDate(ROUND_START);
+    const roundEndDate = toAirtableDate(ROUND_END);
+
     // Prepare updates and creates
     const updates = [];
     const creates = [];
@@ -163,14 +221,15 @@ async function upsertPostHogData(metrics) {
 
         const fields = {
             'Handle': m.handle,
-            'Round start': m.firstActive ? m.firstActive : ROUND_START, // Use first active or round start
-            'Round end': m.lastActive ? m.lastActive : ROUND_END, // Use last active or round end
-            'Visits': m.visits,
+            'Round start': roundStartDate, // Always use input round dates
+            'Round end': roundEndDate, // Always use input round dates
+            'Events': m.events,
+            'Pageviews': m.pageviews,
             'Unique visitors': m.uniqueVisitors,
             'Apply page views': m.applyPageViews,
             'Program page views': m.programPageViews,
-            'First active': m.firstActive,
-            'Last active': m.lastActive,
+            'First active': m.firstActive, // Observed timestamp
+            'Last active': m.lastActive, // Observed timestamp
             'Campaigns': m.campaigns,
         };
 
@@ -184,9 +243,6 @@ async function upsertPostHogData(metrics) {
         if (existingRecord) {
             updates.push({ id: existingRecord.id, fields });
         } else {
-            // For creates, we need to set the date fields to actual dates for the Key formula to work
-            fields['Round start'] = ROUND_START;
-            fields['Round end'] = ROUND_END;
             creates.push({ fields });
         }
     }
@@ -231,11 +287,24 @@ validateInputs();
 console.log(`\nConfiguration:`);
 console.log(`  Table: ${POSTHOG_DATA_TABLE}`);
 console.log(`  Round: ${ROUND_START} to ${ROUND_END}`);
+console.log(`  Round (ISO): ${toISODate(ROUND_START)} to ${toISODate(ROUND_END)}`);
 
 // Fetch metrics from PostHog
 console.log('\n1. Fetching metrics from PostHog...');
 const metrics = await fetchMetrics();
-console.log(`   Found ${metrics.length} unique handles`);
+
+// Log summary
+const directRow = metrics.find(m => m.handle === DIRECT_HANDLE);
+const totalRow = metrics.find(m => m.handle === TOTAL_HANDLE);
+const handleCount = metrics.filter(m => m.handle !== TOTAL_HANDLE).length;
+
+console.log(`   Found ${handleCount} handles (including ${DIRECT_HANDLE})`);
+if (directRow) {
+    console.log(`   ${DIRECT_HANDLE}: ${directRow.events} events, ${directRow.pageviews} pageviews`);
+}
+if (totalRow) {
+    console.log(`   ${TOTAL_HANDLE}: ${totalRow.events} events, ${totalRow.pageviews} pageviews, ${totalRow.uniqueVisitors} unique visitors`);
+}
 
 if (metrics.length === 0) {
     console.log('\nNo data found for this date range.');
