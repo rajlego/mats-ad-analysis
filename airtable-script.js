@@ -95,6 +95,41 @@ function validateInputs() {
 
 // ============ POSTHOG HOGQL API ============
 
+/**
+ * List available event properties from PostHog's property definitions API
+ * Filters for UTM-related properties
+ */
+async function listAvailableProperties() {
+    const url = `${POSTHOG_HOST}/api/projects/${POSTHOG_PROJECT_ID}/property_definitions/?type=event&limit=500`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${POSTHOG_API_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        console.log('   (Could not fetch property definitions)');
+        return [];
+    }
+
+    const data = await response.json();
+    const allProps = (data.results || []).map(p => p.name);
+
+    // Filter for UTM-related and other potentially useful properties
+    const utmProps = allProps.filter(p =>
+        p.toLowerCase().includes('utm') ||
+        p.toLowerCase().includes('referr') ||
+        p.toLowerCase().includes('source') ||
+        p.toLowerCase().includes('campaign') ||
+        p.toLowerCase().includes('medium')
+    );
+
+    return utmProps.sort();
+}
+
 async function runHogQLQuery(query) {
     const url = `${POSTHOG_HOST}/api/projects/${POSTHOG_PROJECT_ID}/query`;
 
@@ -309,8 +344,15 @@ console.log(`  Table: ${POSTHOG_DATA_TABLE}`);
 console.log(`  Round: ${ROUND_START} to ${ROUND_END}`);
 console.log(`  Round (ISO): ${toISODate(ROUND_START)} to ${toISODate(ROUND_END)}`);
 
+// List available UTM properties (via REST API)
+console.log('\n1. Discovering available properties...');
+const availableProps = await listAvailableProperties();
+if (availableProps.length > 0) {
+    console.log(`   UTM-related properties: ${availableProps.join(', ')}`);
+}
+
 // Fetch metrics from PostHog
-console.log('\n1. Fetching metrics from PostHog...');
+console.log('\n2. Fetching metrics from PostHog...');
 const metrics = await fetchMetrics();
 
 // Log summary
@@ -330,7 +372,7 @@ if (metrics.length === 0) {
     console.log('\nNo data found for this date range.');
 } else {
     // Upsert into PostHog data table
-    console.log('\n2. Upserting into Airtable...');
+    console.log('\n3. Upserting into Airtable...');
     const result = await upsertPostHogData(metrics);
 
     console.log('\n' + '='.repeat(50));
