@@ -17,8 +17,9 @@ const REFERRAL_FIELD = '[stage-1-logistics] How did you hear about us?';
 const STAGE_2_FIELD = '[stage-1-infra] Advance to stage 2';
 const OUTPUT_TABLE = '10.0 referral sources';
 
-// Special source for blank responses
+// Special source names
 const BLANK_SOURCE = '(no response)';
+const TOTAL_SOURCE = '(all)';
 
 // Stage 2 status values
 const STATUS_ADVANCED = 'Advanced to stage 2';
@@ -98,7 +99,34 @@ if (blankCount > 0) {
     };
 }
 
-const sourceNames = Object.keys(sourceData).sort((a, b) => sourceData[b].count - sourceData[a].count);
+// Calculate totals across all sources
+let totalCount = 0;
+let totalAdvanced = 0;
+let totalRejected = 0;
+let totalPending = 0;
+
+for (const data of Object.values(sourceData)) {
+    totalAdvanced += data.advanced;
+    totalRejected += data.rejected;
+    totalPending += data.pending;
+}
+// Note: totalCount uses totalApplications since an app can have multiple sources
+totalCount = totalApplications;
+
+// Add total row
+sourceData[TOTAL_SOURCE] = {
+    count: totalCount,
+    advanced: totalAdvanced,
+    rejected: totalRejected,
+    pending: totalPending
+};
+
+const sourceNames = Object.keys(sourceData).sort((a, b) => {
+    // Keep (all) at the top
+    if (a === TOTAL_SOURCE) return -1;
+    if (b === TOTAL_SOURCE) return 1;
+    return sourceData[b].count - sourceData[a].count;
+});
 console.log(`   Found ${sourceNames.length} unique sources (including ${BLANK_SOURCE} if any)`);
 console.log(`   Blank responses: ${blankCount}`);
 
