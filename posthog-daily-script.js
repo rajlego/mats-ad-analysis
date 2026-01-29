@@ -6,7 +6,7 @@
  * Run once per day to capture that day's data.
  *
  * Input variables (set in Automation):
- *   - posthog_api_key: Your PostHog project API key
+ *   - posthog_api_key: Your PostHog personal API key (not project API key)
  *   - posthog_project_id: Your PostHog project ID
  *   - posthog_daily_table: Name of the daily table (e.g., "PostHog daily")
  *   - round_start: Start date for this round (M/D/YY or M/D/YYYY)

@@ -6,7 +6,7 @@
  * Uses HogQL for efficient server-side aggregation.
  *
  * Input variables (set in Automation):
- *   - posthog_api_key: Your PostHog project API key
+ *   - posthog_api_key: Your PostHog personal API key (not project API key)
  *   - posthog_project_id: Your PostHog project ID
  *   - posthog_data_table: Name of the PostHog data table (e.g., "PostHog data")
  *   - round_start: Start date for this round (M/D/YY or M/D/YYYY, e.g., 1/1/25 or 1/1/2025)

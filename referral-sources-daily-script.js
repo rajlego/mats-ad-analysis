@@ -89,53 +89,58 @@ console.log(`   Date range: ${allDates[0]} to ${allDates[allDates.length - 1]}`)
 console.log(`   Unique sources: ${allSources.size}`);
 
 // Calculate cumulative counts for each date and source
+// Optimized O(n) approach: sort apps by date, accumulate as we go
 console.log('\n3. Calculating cumulative counts...');
+
+// Sort applications by creation date
+applications.sort((a, b) => a.createdDate.localeCompare(b.createdDate));
+
+// Initialize running totals per source
+const runningTotals = {};
+for (const source of allSources) {
+    runningTotals[source] = { count: 0, advanced: 0, rejected: 0, pending: 0 };
+}
+let totalCount = 0;
+let totalAdvanced = 0;
+let totalRejected = 0;
+let totalPending = 0;
+
+// Group applications by date
+const appsByDate = {};
+for (const app of applications) {
+    if (!appsByDate[app.createdDate]) {
+        appsByDate[app.createdDate] = [];
+    }
+    appsByDate[app.createdDate].push(app);
+}
+
 const dailyData = []; // { date, source, count, advanced, rejected, pending }
 
+// Process each date in order, accumulating totals
 for (const targetDate of allDates) {
-    // Filter apps created on or before targetDate
-    const appsUpToDate = applications.filter(a => a.createdDate <= targetDate);
+    const appsOnDate = appsByDate[targetDate] || [];
 
-    // Count per source
-    const sourceCounts = {};
-    for (const source of allSources) {
-        sourceCounts[source] = { count: 0, advanced: 0, rejected: 0, pending: 0 };
-    }
-
-    // Count total
-    let totalCount = 0;
-    let totalAdvanced = 0;
-    let totalRejected = 0;
-    let totalPending = 0;
-
-    for (const app of appsUpToDate) {
+    // Add this date's apps to running totals
+    for (const app of appsOnDate) {
         totalCount++;
         if (app.isAdvanced) totalAdvanced++;
         else if (app.isRejected) totalRejected++;
         else totalPending++;
 
         for (const source of app.sources) {
-            if (!sourceCounts[source]) {
-                sourceCounts[source] = { count: 0, advanced: 0, rejected: 0, pending: 0 };
+            if (!runningTotals[source]) {
+                runningTotals[source] = { count: 0, advanced: 0, rejected: 0, pending: 0 };
             }
-            sourceCounts[source].count++;
-            if (app.isAdvanced) sourceCounts[source].advanced++;
-            else if (app.isRejected) sourceCounts[source].rejected++;
-            else sourceCounts[source].pending++;
+            runningTotals[source].count++;
+            if (app.isAdvanced) runningTotals[source].advanced++;
+            else if (app.isRejected) runningTotals[source].rejected++;
+            else runningTotals[source].pending++;
         }
     }
 
-    // Add total row
-    sourceCounts[TOTAL_SOURCE] = {
-        count: totalCount,
-        advanced: totalAdvanced,
-        rejected: totalRejected,
-        pending: totalPending
-    };
-
-    // Create daily data entries
-    for (const [source, data] of Object.entries(sourceCounts)) {
-        if (data.count > 0 || source === TOTAL_SOURCE) {
+    // Snapshot current totals for this date (excluding TOTAL_SOURCE which we handle separately)
+    for (const [source, data] of Object.entries(runningTotals)) {
+        if (source !== TOTAL_SOURCE && data.count > 0) {
             dailyData.push({
                 date: targetDate,
                 source: source,
@@ -146,6 +151,16 @@ for (const targetDate of allDates) {
             });
         }
     }
+
+    // Add total row for this date
+    dailyData.push({
+        date: targetDate,
+        source: TOTAL_SOURCE,
+        count: totalCount,
+        advanced: totalAdvanced,
+        rejected: totalRejected,
+        pending: totalPending
+    });
 }
 
 console.log(`   Generated ${dailyData.length} daily records`);
