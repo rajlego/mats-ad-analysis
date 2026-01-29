@@ -133,8 +133,9 @@ This means you can re-run the script and it will update existing records rather 
 
 | File | Purpose |
 |------|---------|
-| `airtable-script.js` | Main sync script (paste into Airtable Automation) |
-| `create-table-script.js` | One-time setup script to create table fields |
+| `airtable-script.js` | PostHog → Airtable sync script (paste into Airtable Automation) |
+| `referral-sources-script.js` | Aggregates "How did you hear about us?" responses |
+| `create-table-script.js` | One-time setup script to create PostHog data table fields |
 | `README.md` | This file |
 
 ## Troubleshooting
