@@ -14,10 +14,15 @@
 
 const APPLICATIONS_TABLE = '10.0 application';
 const REFERRAL_FIELD = '[stage-1-logistics] How did you hear about us?';
+const STAGE_2_FIELD = '[stage-1-infra] Advance to stage 2';
 const OUTPUT_TABLE = '10.0 referral sources';
 
 // Special source for blank responses
 const BLANK_SOURCE = '(no response)';
+
+// Stage 2 status values
+const STATUS_ADVANCED = 'Advanced to stage 2';
+const STATUS_REJECTED = 'Reject';
 
 /**
  * Normalize source name for consistent matching
@@ -38,28 +43,46 @@ const outputTable = base.getTable(OUTPUT_TABLE);
 // Fetch all applications
 console.log(`\n1. Fetching records from "${APPLICATIONS_TABLE}"...`);
 const applicationsQuery = await applicationsTable.selectRecordsAsync({
-    fields: [REFERRAL_FIELD]
+    fields: [REFERRAL_FIELD, STAGE_2_FIELD]
 });
 
 const totalApplications = applicationsQuery.records.length;
 console.log(`   Found ${totalApplications} applications`);
 
-// Count each referral source
-console.log('\n2. Counting referral sources...');
-const sourceCounts = {};
+// Count each referral source and stage 2 outcomes
+console.log('\n2. Counting referral sources and outcomes...');
+const sourceData = {}; // { sourceName: { count, advanced, rejected, pending } }
 let blankCount = 0;
+let blankAdvanced = 0;
+let blankRejected = 0;
+let blankPending = 0;
 
 for (const record of applicationsQuery.records) {
     const sources = record.getCellValue(REFERRAL_FIELD);
+    const stage2Status = record.getCellValueAsString(STAGE_2_FIELD);
+
+    // Determine outcome
+    const isAdvanced = stage2Status === STATUS_ADVANCED;
+    const isRejected = stage2Status === STATUS_REJECTED;
+    const isPending = !stage2Status;
 
     if (!sources || !Array.isArray(sources) || sources.length === 0) {
         // No response
         blankCount++;
+        if (isAdvanced) blankAdvanced++;
+        else if (isRejected) blankRejected++;
+        else blankPending++;
     } else {
         for (const source of sources) {
             const name = normalizeSource(source.name);
             if (name) {
-                sourceCounts[name] = (sourceCounts[name] || 0) + 1;
+                if (!sourceData[name]) {
+                    sourceData[name] = { count: 0, advanced: 0, rejected: 0, pending: 0 };
+                }
+                sourceData[name].count++;
+                if (isAdvanced) sourceData[name].advanced++;
+                else if (isRejected) sourceData[name].rejected++;
+                else sourceData[name].pending++;
             }
         }
     }
@@ -67,19 +90,24 @@ for (const record of applicationsQuery.records) {
 
 // Add blank responses
 if (blankCount > 0) {
-    sourceCounts[BLANK_SOURCE] = blankCount;
+    sourceData[BLANK_SOURCE] = {
+        count: blankCount,
+        advanced: blankAdvanced,
+        rejected: blankRejected,
+        pending: blankPending
+    };
 }
 
-const sourceNames = Object.keys(sourceCounts).sort((a, b) => sourceCounts[b] - sourceCounts[a]);
+const sourceNames = Object.keys(sourceData).sort((a, b) => sourceData[b].count - sourceData[a].count);
 console.log(`   Found ${sourceNames.length} unique sources (including ${BLANK_SOURCE} if any)`);
 console.log(`   Blank responses: ${blankCount}`);
 
-// Show top 5
-console.log('\n   Top 5 sources:');
+// Show top 5 with advancement rates
+console.log('\n   Top 5 sources (with advancement rate):');
 for (const name of sourceNames.slice(0, 5)) {
-    const count = sourceCounts[name];
-    const pct = ((count / totalApplications) * 100).toFixed(1);
-    console.log(`   - ${name}: ${count} (${pct}%)`);
+    const data = sourceData[name];
+    const advRate = data.count > 0 ? ((data.advanced / data.count) * 100).toFixed(1) : '0';
+    console.log(`   - ${name}: ${data.count} total, ${data.advanced} advanced (${advRate}%)`);
 }
 
 // Fetch existing records from output table
@@ -121,13 +149,16 @@ const creates = [];
 const seenSources = new Set();
 
 for (const name of sourceNames) {
-    const count = sourceCounts[name];
+    const data = sourceData[name];
     const normalizedName = normalizeSource(name);
     const existingRecord = sourceToRecord[normalizedName];
 
     const fields = {
         'Source': name,
-        'Count': count,
+        'Count': data.count,
+        'Advanced': data.advanced,
+        'Rejected': data.rejected,
+        'Pending': data.pending,
         'Total applications': totalApplications
     };
 
@@ -147,6 +178,9 @@ for (const [source, record] of Object.entries(sourceToRecord)) {
             id: record.id,
             fields: {
                 'Count': 0,
+                'Advanced': 0,
+                'Rejected': 0,
+                'Pending': 0,
                 'Total applications': totalApplications
             }
         });
