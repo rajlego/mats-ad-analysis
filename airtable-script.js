@@ -171,8 +171,8 @@ async function fetchMetrics() {
             count() as events,
             countIf(event = '$pageview') as pageviews,
             count(DISTINCT distinct_id) as unique_visitors,
-            countIf(properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
-            countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
+            countIf(event = '$pageview' AND properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
+            countIf(event = '$pageview' AND properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
             min(timestamp) as first_active,
             max(timestamp) as last_active,
             groupUniqArray(properties.utm_campaign) as campaigns
@@ -192,8 +192,8 @@ async function fetchMetrics() {
             count() as events,
             countIf(event = '$pageview') as pageviews,
             count(DISTINCT distinct_id) as unique_visitors,
-            countIf(properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
-            countIf(properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
+            countIf(event = '$pageview' AND properties.$current_url LIKE '${APPLY_PAGE_PATTERN}') as apply_page_views,
+            countIf(event = '$pageview' AND properties.$current_url LIKE '${PROGRAM_PAGE_PATTERN}') as program_page_views,
             min(timestamp) as first_active,
             max(timestamp) as last_active,
             groupUniqArray(properties.utm_campaign) as campaigns
