@@ -112,6 +112,7 @@ async function fetchDailyMetrics() {
           AND timestamp <= toDateTime('${endISO} 23:59:59')
         GROUP BY event_date, handle
         ORDER BY event_date DESC, events DESC
+        LIMIT 50000
     `;
 
     console.log('Running HogQL query for daily metrics...');

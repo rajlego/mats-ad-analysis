@@ -180,6 +180,7 @@ async function fetchMetrics() {
         WHERE ${dateFilter}
         GROUP BY handle
         ORDER BY events DESC
+        LIMIT 50000
     `;
 
     console.log('Running HogQL query for per-handle metrics...');
