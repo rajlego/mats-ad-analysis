@@ -51,8 +51,15 @@ console.log('\n2. Processing applications by creation date...');
 const applications = [];
 
 for (const record of applicationsQuery.records) {
-    const createdTime = record.createdTime; // ISO string
-    const createdDate = createdTime.slice(0, 10); // YYYY-MM-DD
+    const createdTime = record.createdTime; // ISO string or Date object
+    if (!createdTime) {
+        console.log(`   Warning: record ${record.id} has no createdTime, skipping`);
+        continue;
+    }
+    // Handle both string and Date object
+    const createdDate = typeof createdTime === 'string'
+        ? createdTime.slice(0, 10)
+        : createdTime.toISOString().slice(0, 10); // YYYY-MM-DD
     const sources = record.getCellValue(REFERRAL_FIELD);
     const stage2Status = record.getCellValueAsString(STAGE_2_FIELD);
 
