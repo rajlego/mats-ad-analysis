@@ -1,0 +1,67 @@
+{
+  "_comment": "Mapping of PostHog utm_source handles to referral source names. Edit this file to correct mappings.",
+  "_unmapped_note": "Handles not in this file have no corresponding referral source",
+
+  "80,000 hours mailing list": "80,000 Hours",
+  "80k": "80,000 Hours",
+  "80k-board": "80,000 Hours",
+  "80k-newsletter": "80,000 Hours",
+
+  "acx": "ACX",
+
+  "ai-alignment-slack": "Slack group",
+  "bluedot-slack": "Slack group",
+
+  "ai-explained": "AI Explained",
+
+  "ai-in-context": "AI in Context",
+
+  "ai-safety-fb": "Facebook",
+  "ai-safety-oceania-fb": "Facebook",
+
+  "ai-safety-google-group": "Email",
+
+  "aisf-newsletter": "Email from MATS",
+  "mats-newsletter": "Email from MATS",
+
+  "clearer_thinking": "Clearer Thinking",
+  "3dclearer_thinking": "Clearer Thinking",
+  "ct": "Clearer Thinking",
+
+  "dev-interp-discord": "Discord",
+  "ai-safety-quest-discord": "Discord",
+  "dank-ai-memes": "Discord",
+
+  "ea-forum-digest": "EA Forum",
+
+  "ea-groups": "AI safety/EA student group",
+  "ai-safety-camp": "AI safety/EA student group",
+  "ai-safety-danmark": "AI safety/EA student group",
+  "ai-safety-discussion": "AI safety/EA student group",
+  "ai-safety-discussion-open": "AI safety/EA student group",
+  "asesc": "AI safety/EA student group",
+  "chicago-cais": "AI safety/EA student group",
+
+  "ea-job-postings": "Job board",
+  "ea-opportunity-board": "Job board",
+  "aisafety-com": "Job board",
+
+  "lw": "LessWrong",
+
+  "tcr": "The Cognitive Revolution",
+
+  "berkeley": "University department/career services",
+  "cambridge": "University department/career services",
+  "cmu": "University department/career services",
+  "cornell": "University department/career services",
+  "harvard": "University department/career services",
+  "mit": "University department/career services",
+  "mitlist": "University department/career services",
+  "princeton": "University department/career services",
+  "stanford": "University department/career services",
+
+  "substack": "Other",
+  "chatgpt.com": "Other",
+  "zvi": "Other",
+  "rob-miles": "Other"
+}
