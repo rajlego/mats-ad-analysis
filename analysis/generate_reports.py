@@ -91,9 +91,17 @@ def generate_executive_summary(data):
     posthog = data['posthog']
     referral = data['referral']
     referral_daily = data['referral_daily']
+    posthog_daily = data['posthog_daily']
 
-    # Calculate corrected totals
+    # Calculate corrected totals (with fallback)
     totals = calculate_correct_totals(referral)
+    if totals is None:
+        # Fallback if (all) row is missing
+        totals = {'count': 0, 'advanced': 0, 'rejected': 0, 'pending': 0, 'advancement_rate': 0}
+
+    # Get date range from data
+    date_start = posthog_daily['Date'].min().strftime('%B %d, %Y') if len(posthog_daily) > 0 else 'N/A'
+    date_end = posthog_daily['Date'].max().strftime('%B %d, %Y') if len(posthog_daily) > 0 else 'N/A'
 
     # Get key metrics from PostHog (excluding special rows)
     posthog_filtered = posthog[~posthog['Handle'].isin(['(all)', '(direct)'])]
@@ -106,12 +114,16 @@ def generate_executive_summary(data):
     top_by_volume = get_top_sources(referral, n=10, metric='Count')
     top_by_quality = get_sources_by_quality(referral, n=10, min_count=20)
 
-    # Best overall source (high quality + decent volume)
+    # Best ROI sources (high quality + decent volume, min 30 apps)
     referral_filtered = referral[~referral['Source'].isin(['(all)', '(no response)'])]
     referral_filtered = referral_filtered[referral_filtered['Count'] >= 30].copy()
-    referral_filtered['Quality Score'] = (referral_filtered['Stage 2 advanced'] / referral_filtered['Count']) * 100
-    if len(referral_filtered) > 0:
-        best_overall = referral_filtered.nlargest(1, 'Quality Score').iloc[0]
+    referral_filtered['Quality Score'] = referral_filtered.apply(
+        lambda r: (r['Stage 2 advanced'] / r['Count'] * 100) if r['Count'] > 0 else 0, axis=1
+    )
+    best_roi_sources = referral_filtered.nlargest(10, 'Quality Score')
+
+    if len(best_roi_sources) > 0:
+        best_overall = best_roi_sources.iloc[0]
         best_source_name = best_overall['Source']
         best_source_rate = best_overall['Quality Score']
         best_source_count = int(best_overall['Count'])
@@ -200,7 +212,37 @@ def generate_executive_summary(data):
         hovermode='x unified'
     )
 
-    # 5. Stage 2 Outcomes Pie
+    # 5. Pareto Chart (80/20 analysis)
+    pareto_data = top_by_volume.copy()
+    pareto_data = pareto_data.sort_values('Count', ascending=False)
+    pareto_data['Cumulative'] = pareto_data['Count'].cumsum()
+    pareto_data['Cumulative %'] = pareto_data['Cumulative'] / totals['count'] * 100
+
+    pareto_fig = make_subplots(specs=[[{"secondary_y": True}]])
+    pareto_fig.add_trace(
+        go.Bar(x=pareto_data['Source'], y=pareto_data['Count'],
+               name='Applications', marker_color=COLORS['primary']),
+        secondary_y=False
+    )
+    pareto_fig.add_trace(
+        go.Scatter(x=pareto_data['Source'], y=pareto_data['Cumulative %'],
+                   name='Cumulative %', mode='lines+markers',
+                   line=dict(color=COLORS['warning'], width=3)),
+        secondary_y=True
+    )
+    pareto_fig.add_hline(y=80, line_dash="dash", line_color="gray",
+                         annotation_text="80%", secondary_y=True)
+    pareto_fig.update_layout(
+        title=dict(text="Pareto Analysis: Which Sources Drive 80% of Applications?", font=dict(size=20)),
+        height=400,
+        template=TEMPLATE,
+        xaxis_tickangle=-45,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02)
+    )
+    pareto_fig.update_yaxes(title_text="Applications", secondary_y=False)
+    pareto_fig.update_yaxes(title_text="Cumulative %", secondary_y=True, range=[0, 105])
+
+    # 6. Stage 2 Outcomes Pie
     outcomes_fig = go.Figure(go.Pie(
         labels=['Advanced', 'Rejected', 'Pending'],
         values=[totals['advanced'], totals['rejected'], totals['pending']],
@@ -309,7 +351,34 @@ def generate_executive_summary(data):
     <div class="container">
         <div class="header">
             <h1>MATS Advertising Analysis</h1>
-            <div class="subtitle">Executive Summary | Generated {datetime.now().strftime('%B %d, %Y')}</div>
+            <div class="subtitle">Executive Summary | {date_start} - {date_end}</div>
+        </div>
+
+        <!-- TL;DR -->
+        <div style="background: linear-gradient(135deg, {COLORS['primary']}10, {COLORS['success']}10);
+                    border: 2px solid {COLORS['primary']}30;
+                    border-radius: 12px;
+                    padding: 24px;
+                    margin-bottom: 32px;">
+            <h3 style="margin-bottom: 16px; color: {COLORS['text']};">TL;DR</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="margin-bottom: 12px; padding-left: 24px; position: relative;">
+                    <span style="position: absolute; left: 0;">📊</span>
+                    <strong>Volume:</strong> {totals['count']:,} applications from {total_visitors:,} visitors.
+                    <strong>{top_by_volume.iloc[0]['Source']}</strong> drives {top_by_volume.iloc[0]['Count']/totals['count']*100:.0f}% of applications.
+                </li>
+                <li style="margin-bottom: 12px; padding-left: 24px; position: relative;">
+                    <span style="position: absolute; left: 0;">⭐</span>
+                    <strong>Quality:</strong> {totals['advancement_rate']:.0f}% overall Stage 2 advancement rate.
+                    Best quality sources: <strong>{top_by_quality.iloc[0]['Source']}</strong> ({top_by_quality.iloc[0]['Stage 2 advanced']/top_by_quality.iloc[0]['Count']*100:.0f}%),
+                    <strong>{top_by_quality.iloc[1]['Source']}</strong> ({top_by_quality.iloc[1]['Stage 2 advanced']/top_by_quality.iloc[1]['Count']*100:.0f}%).
+                </li>
+                <li style="padding-left: 24px; position: relative;">
+                    <span style="position: absolute; left: 0;">💡</span>
+                    <strong>Action:</strong> Double down on high-ROI sources like <strong>{best_roi_sources.iloc[0]['Source']}</strong> and
+                    <strong>{best_roi_sources.iloc[1]['Source']}</strong> which combine volume with quality.
+                </li>
+            </ul>
         </div>
 
         <!-- Key Metrics -->
@@ -345,27 +414,35 @@ def generate_executive_summary(data):
             <div id="growth-chart"></div>
         </div>
 
+        <!-- Pareto Analysis -->
+        <div class="chart-container" style="margin-top: 24px;">
+            <div id="pareto-chart"></div>
+        </div>
+
         <!-- Key Insights -->
         <div class="section" style="margin-top: 24px;">
             <h2>Key Insights</h2>
             <div class="insights-grid">
                 {create_insight_box(
                     "Top Volume Sources",
-                    f"<strong>LinkedIn</strong> leads with {int(top_by_volume.iloc[0]['Count'])} applications ({top_by_volume.iloc[0]['Count']/totals['count']*100:.1f}% of total). "
-                    f"<strong>Personal recommendations</strong> and <strong>X (Twitter)</strong> are #2 and #3.",
+                    f"<strong>{top_by_volume.iloc[0]['Source']}</strong> leads with {int(top_by_volume.iloc[0]['Count'])} applications ({top_by_volume.iloc[0]['Count']/totals['count']*100:.1f}% of total). "
+                    f"<strong>{top_by_volume.iloc[1]['Source']}</strong> ({int(top_by_volume.iloc[1]['Count'])}) and <strong>{top_by_volume.iloc[2]['Source']}</strong> ({int(top_by_volume.iloc[2]['Count'])}) are #2 and #3.",
                     "📊"
                 )}
                 {create_insight_box(
                     "Highest Quality Sources",
                     f"Among sources with 20+ applications, <strong>{top_by_quality.iloc[0]['Source']}</strong> has the highest advancement rate at "
                     f"{top_by_quality.iloc[0]['Stage 2 advanced']/top_by_quality.iloc[0]['Count']*100:.1f}%. "
-                    f"<strong>LessWrong</strong> and <strong>AI safety/EA student groups</strong> also show excellent quality.",
+                    f"<strong>{top_by_quality.iloc[1]['Source']}</strong> ({top_by_quality.iloc[1]['Stage 2 advanced']/top_by_quality.iloc[1]['Count']*100:.1f}%) and "
+                    f"<strong>{top_by_quality.iloc[2]['Source']}</strong> ({top_by_quality.iloc[2]['Stage 2 advanced']/top_by_quality.iloc[2]['Count']*100:.1f}%) also excel.",
                     "⭐"
                 )}
                 {create_insight_box(
                     "Best ROI Sources",
-                    f"Sources with both high volume AND high quality: <strong>Personal recommendations</strong> (78.7% rate, 362 apps), "
-                    f"<strong>80,000 Hours</strong> (77.6% rate, 294 apps), and <strong>AI safety/EA student groups</strong> (80.9% rate, 272 apps).",
+                    f"Sources with both high volume AND high quality (min 30 apps, sorted by advancement rate): "
+                    f"<strong>{best_roi_sources.iloc[0]['Source']}</strong> ({best_roi_sources.iloc[0]['Quality Score']:.1f}% rate, {int(best_roi_sources.iloc[0]['Count'])} apps), "
+                    f"<strong>{best_roi_sources.iloc[1]['Source']}</strong> ({best_roi_sources.iloc[1]['Quality Score']:.1f}% rate, {int(best_roi_sources.iloc[1]['Count'])} apps), "
+                    f"<strong>{best_roi_sources.iloc[2]['Source']}</strong> ({best_roi_sources.iloc[2]['Quality Score']:.1f}% rate, {int(best_roi_sources.iloc[2]['Count'])} apps).",
                     "💰"
                 )}
                 {create_insight_box(
@@ -377,8 +454,16 @@ def generate_executive_summary(data):
             </div>
         </div>
 
+        <!-- Data Scope -->
+        <div style="background: #f1f5f9; border-radius: 8px; padding: 16px; margin-top: 16px; font-size: 14px; color: #475569;">
+            <strong>Data Scope:</strong> {date_start} to {date_end} |
+            Traffic data from PostHog (website analytics) |
+            Application data from referral forms |
+            Stage 2 totals are estimated after de-duplicating multi-source responses
+        </div>
+
         <div class="footer">
-            Generated by MATS Advertising Analysis Tool | Data as of {datetime.now().strftime('%Y-%m-%d')}
+            Generated by MATS Advertising Analysis Tool | Data: {date_start} - {date_end}
         </div>
     </div>
 
@@ -388,6 +473,7 @@ def generate_executive_summary(data):
         Plotly.newPlot('volume-chart', {volume_fig.to_json()}.data, {volume_fig.to_json()}.layout, {{responsive: true}});
         Plotly.newPlot('quality-chart', {quality_fig.to_json()}.data, {quality_fig.to_json()}.layout, {{responsive: true}});
         Plotly.newPlot('growth-chart', {growth_fig.to_json()}.data, {growth_fig.to_json()}.layout, {{responsive: true}});
+        Plotly.newPlot('pareto-chart', {pareto_fig.to_json()}.data, {pareto_fig.to_json()}.layout, {{responsive: true}});
     </script>
 </body>
 </html>
